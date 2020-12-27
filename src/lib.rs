@@ -209,6 +209,7 @@ impl<'a> WasinaryImage<'a> {
       self.write_to_output(Some(out_img))
     }
 
+    // TODO: change text bg to white and text color to black
     pub fn write_text(&mut self, text: &'a str) -> Self {
       let mut out_img = image::RgbImage::new(200, 200);
       let font = Vec::from(include_bytes!("DejaVuSans.ttf") as &[u8]);
