@@ -1,5 +1,5 @@
 use fs::File;
-use image::{DynamicImage, GenericImage, ImageError, ImageOutputFormat, Rgb, imageops::overlay, load_from_memory};
+use image::{DynamicImage, GenericImage, ImageError, ImageOutputFormat, Rgb, imageops::overlay, load_from_memory, GenericImageView};
 use imageproc::drawing::draw_text_mut;
 use path::Path;
 use std::panic;
@@ -24,14 +24,17 @@ pub struct WasinaryImage<'a> {
 fn download_image(url: &str) -> Option<Box<[u8]>> {
     let img_bytes = reqwest::blocking::get(url).ok()?.bytes().ok();
     let img: Result<DynamicImage, ImageError> = match img_bytes {
-        Some(x) => image::load_from_memory(&x),
-        None => Err(image::ImageError::Decoding(
-            image::error::DecodingError::new(image::error::ImageFormatHint::Unknown, "OOps!!"),
-        )),
+        Some(x) => load_from_memory(&x),
+        None => {
+            println!("Could not download image");
+            Err(ImageError::Decoding(
+                image::error::DecodingError::new(image::error::ImageFormatHint::Unknown, "OOps!!"),
+            ))
+        },
     };
     let mut out_writer = Vec::new();
-    img.unwrap()
-        .write_to(&mut out_writer, image::ImageOutputFormat::Png)
+    img.expect("Could not download image")
+        .write_to(&mut out_writer, ImageOutputFormat::Png)
         .unwrap();
     Some(out_writer.into_boxed_slice())
     // let img = image::load_from_memory(&img_bytes);
@@ -124,8 +127,8 @@ impl<'a> WasinaryImage<'a> {
         }
 
         let mut out_writer: Vec<u8> = Vec::new();
-        let md = image::DynamicImage::ImageRgba8(output_img);
-        md.write_to(&mut out_writer, image::ImageOutputFormat::Png)
+        let md = DynamicImage::ImageRgba8(output_img);
+        md.write_to(&mut out_writer, ImageOutputFormat::Png)
             .unwrap();
         self.output_image = Some(out_writer.into_boxed_slice());
         WasinaryImage {
@@ -159,22 +162,22 @@ impl<'a> WasinaryImage<'a> {
     pub fn rotate(&mut self, degree: u32) -> Self {
         let img = match degree {
             90 => Some(
-                image::load_from_memory(&self.output_image.clone().unwrap().into_vec())
+                load_from_memory(&self.output_image.clone().unwrap().into_vec())
                     .unwrap()
                     .rotate90(),
             ),
             180 => Some(
-                image::load_from_memory(&self.output_image.clone().unwrap().into_vec())
+                load_from_memory(&self.output_image.clone().unwrap().into_vec())
                     .unwrap()
                     .rotate180(),
             ),
             270 => Some(
-                image::load_from_memory(&self.output_image.clone().unwrap().into_vec())
+                load_from_memory(&self.output_image.clone().unwrap().into_vec())
                     .unwrap()
                     .rotate270(),
             ),
             360 => Some(
-                image::load_from_memory(&self.output_image.clone().unwrap().into_vec()).unwrap(),
+                load_from_memory(&self.output_image.clone().unwrap().into_vec()).unwrap(),
             ),
             _ => {
                 unsafe {
@@ -187,51 +190,78 @@ impl<'a> WasinaryImage<'a> {
     }
 
     pub fn overlay(&mut self, url: &'a str, x:u32, y:u32) -> Self {
-      let downloaded = download_image(url);
-      let mut overlay_img = image::load_from_memory(&downloaded.unwrap().into_vec()).unwrap();
-      let out_img = image::load_from_memory(&self.output_image.clone().unwrap().into_vec()).unwrap();
-      let fout = &mut File::create(&Path::new(&format!("{}.png", "overlay1"))).unwrap();
-      overlay_img.write_to(fout, image::ImageOutputFormat::Png).unwrap();
-      image::imageops::overlay(&mut overlay_img, &out_img, x, y);
-      self.write_to_output(Some(overlay_img))
+        let downloaded = download_image(url);
+        let mut overlay_img = image::load_from_memory(&downloaded.unwrap().into_vec()).unwrap();
+        let out_img = image::load_from_memory(&self.output_image.clone().unwrap().into_vec()).unwrap();
+        let fout = &mut File::create(&Path::new(&format!("{}.png", "overlay1"))).unwrap();
+        overlay_img.write_to(fout, image::ImageOutputFormat::Png).unwrap();
+        image::imageops::overlay(&mut overlay_img, &out_img, x, y);
+        self.write_to_output(Some(overlay_img))
     }
     // for now, the watermark simply puts the image in the bottom right corner of the background image
     // and the image supplied has to have the "watermark effect" on it already
     // TODO: perhaps detect and apply "watermark effect"
     pub fn watermark(&mut self, url: &'a str) -> Self {
-      let downloaded = download_image(url);
-      let watermark_img = image::load_from_memory(&downloaded.unwrap().into_vec()).unwrap().resize(200, 200, image::imageops::FilterType::Gaussian).brighten(100);
-      let mut out_img = image::load_from_memory(&self.output_image.clone().unwrap().into_vec()).unwrap();
-      let (width, height) = out_img.clone().to_rgba8().dimensions();
-      let (w, h) = watermark_img.clone().to_rgb8().dimensions();
-      println!("Width is: {:?} and height is: {:?}", width, height);
-      image::imageops::overlay(&mut out_img, &watermark_img,  width - (w+10), height - (h+10));
-      self.write_to_output(Some(out_img))
+        let downloaded = download_image(url);
+        let watermark_img = image::load_from_memory(&downloaded.unwrap().into_vec()).unwrap().resize(200, 200, image::imageops::FilterType::Gaussian).brighten(100);
+        let mut out_img = image::load_from_memory(&self.output_image.clone().unwrap().into_vec()).unwrap();
+        let (width, height) = out_img.clone().to_rgba8().dimensions();
+        let (w, h) = watermark_img.clone().to_rgb8().dimensions();
+        println!("Width is: {:?} and height is: {:?}", width, height);
+        overlay(&mut out_img, &watermark_img,  width - (w+10), height - (h+10));
+        self.write_to_output(Some(out_img))
     }
 
     // TODO: change text bg to white and text color to black
     pub fn write_text(&mut self, text: &'a str) -> Self {
-      let mut out_img = image::RgbImage::new(200, 200);
-      let font = Vec::from(include_bytes!("DejaVuSans.ttf") as &[u8]);
-      let font = rusttype::Font::try_from_vec(font).unwrap();
-      let height = 12.4;
-      let scale = rusttype::Scale{
-        x: height*2.0,
-        y: height,
-      };
-      draw_text_mut(&mut out_img, Rgb([0u8, 0u8, 255u8]), 0, 0, scale, &font, text);
-      let out_img = DynamicImage::ImageRgb8(out_img);
-      let fout = &mut File::create(&Path::new(&format!("{}.png", "dummy"))).unwrap();
-      out_img.write_to(fout, ImageOutputFormat::Png).unwrap();
-      let mut base_img = load_from_memory(&self.output_image.clone().unwrap().into_vec()).unwrap();
-      let (w, h) = base_img.clone().into_rgba8().dimensions();
-      overlay(&mut base_img, &out_img, w/2, h-100);
-      self.write_to_output(Some(base_img))
+        let mut out_img = image::RgbImage::new(200, 200);
+        let font = Vec::from(include_bytes!("DejaVuSans.ttf") as &[u8]);
+        let font = rusttype::Font::try_from_vec(font).unwrap();
+        let height = 12.4;
+        let scale = rusttype::Scale{
+            x: height*2.0,
+            y: height,
+        };
+        draw_text_mut(&mut out_img, Rgb([0u8, 0u8, 255u8]), 0, 0, scale, &font, text);
+        let out_img = DynamicImage::ImageRgb8(out_img);
+        let fout = &mut File::create(&Path::new(&format!("{}.png", "dummy"))).unwrap();
+        out_img.write_to(fout, ImageOutputFormat::Png).unwrap();
+        let mut base_img = load_from_memory(&self.output_image.clone().unwrap().into_vec()).unwrap();
+        let (w, h) = base_img.clone().into_rgba8().dimensions();
+        overlay(&mut base_img, &out_img, w/2, h-100);
+        self.write_to_output(Some(base_img))
+    }
+
+
+    pub fn background_color(&mut self, color: [u8;4]) -> Self {
+        let img = load_from_memory(&self.output_image.clone().unwrap().into_vec())
+            .expect("Failed to load image");
+        let (width, height) = img.dimensions();
+
+        let mut out_img = image::RgbaImage::new(width, height);
+        let color = image::Rgba(color);
+        for x in 0..width {
+            for y in 0..height {
+                // get the pixel at (x, y), log the color and check if its transparent
+                let pixel = img.get_pixel(x, y);
+                let pixel_color = image::Rgba([pixel[0], pixel[1], pixel[2], pixel[3]]);
+                // 155 is presumed to be "light mode" i.e the background is white-ish. as time goes on, i may need to adjust this
+                // but this is not just a random selection but inspired by:
+                // https://stackoverflow.com/questions/12043187/how-to-check-if-hex-color-is-too-black
+                // that means it should replace pretty much any color that is not too dark
+                if pixel_color[0] >= 155 && pixel_color[1] >= 155 && pixel_color[2] >= 155 {
+                    out_img.put_pixel(x, y, color);
+                } else {
+                    out_img.put_pixel(x, y, pixel_color);
+                }
+            }
+        }
+        self.write_to_output(Some(DynamicImage::ImageRgba8(out_img)))
     }
 
 
     pub fn done(&self) -> DynamicImage {
-        let img = image::load_from_memory(&self.output_image.clone().unwrap().into_vec()).unwrap();
+        let img = load_from_memory(&self.output_image.clone().unwrap().into_vec()).unwrap();
         return img;
     }
 }

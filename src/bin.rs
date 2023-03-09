@@ -6,11 +6,12 @@ fn main() {
         height: 10,
     };
     let mut ps = wasinary::WasinaryImage::new(
-        "https://c.files.bbci.co.uk/12A9B/production/_111434467_gettyimages-1143489763.jpg",
+        "https://thumbs.dreamstime.com/b/tree-white-background-no6-14621137.jpg",
     );
     let img = ps.download()
-    .sepia()
-    .write_text("Sid!")
+    // .sepia()
+    // .write_text("Sid!")
+        .background_color([67, 12, 245, 255])
     .done();
     // .resize(200, 200)
     // .overlay("https://images.genius.com/c89349ae9941cfe3fc5bc34f9934fa21.1000x1000x1.jpg", 10, 20)
