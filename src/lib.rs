@@ -239,7 +239,8 @@ impl<'a> WasinaryImage<'a> {
         let (width, height) = img.dimensions();
 
         let mut out_img = image::RgbaImage::new(width, height);
-        let color = image::Rgba(color);
+        // let color = image::Rgba(color);
+        let color = image::Rgba([color[0], color[1], color[2], color[3]]);
         for x in 0..width {
             for y in 0..height {
                 // get the pixel at (x, y), log the color and check if its transparent
@@ -258,6 +259,24 @@ impl<'a> WasinaryImage<'a> {
         }
         self.write_to_output(Some(DynamicImage::ImageRgba8(out_img)))
     }
+
+    // pub fn tile(&self) -> Self {
+    //     let img = load_from_memory(&self.output_image.clone().unwrap().into_vec())
+    //         .expect("Failed to load image");
+    //     let (width, height) = img.dimensions();
+    //     // create a new empty image with 1920x1080 dimensions
+    //     // then divide the image into 4 parts
+    //     // read the images into each of the 4 parts of the empty image
+    //     // then return the image
+    //     let mut out_img = image::RgbaImage::new(width, height);
+    //     let mut x = 0;
+    //     let mut y = 0;
+    //
+    //     // divide the image into 4 parts
+    //     let (w, h) = (width/2, height/2);
+    //     // read the images into each of the 4 parts of the empty image
+    //
+    // }
 
 
     pub fn done(&self) -> DynamicImage {

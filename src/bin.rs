@@ -11,7 +11,7 @@ fn main() {
     let img = ps.download()
     // .sepia()
     // .write_text("Sid!")
-        .background_color([67, 12, 245, 255])
+        .background_color([0, 255, 0, 1])
     .done();
     // .resize(200, 200)
     // .overlay("https://images.genius.com/c89349ae9941cfe3fc5bc34f9934fa21.1000x1000x1.jpg", 10, 20)
